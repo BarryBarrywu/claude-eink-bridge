@@ -4,3 +4,4 @@ __pycache__/
 preview.png
 page_*.png
 .DS_Store
+config.json

@@ -14,9 +14,11 @@
  *   node setup-eink.mjs --undo   # Restore original statusLine
  */
 
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 
 const HOME = homedir();
 const SETTINGS = join(HOME, ".claude", "settings.json");
@@ -48,18 +50,28 @@ function install(settings) {
     settings._einkOriginalStatusLine = settings.statusLine;
   }
 
+  let bunPath;
+  try {
+    bunPath = execSync("which bun", { encoding: "utf8" }).trim();
+  } catch {
+    bunPath = join(HOME, ".bun", "bin", "bun");
+    console.warn(`⚠️  Could not find bun via 'which bun', falling back to ${bunPath}`);
+  }
+
   settings.statusLine = {
     type: "command",
-    command: `"/Users/barry/.bun/bin/bun" --env-file /dev/null "${WRAPPER}"`,
+    command: `"${bunPath}" --env-file /dev/null "${WRAPPER}"`,
   };
 
   writeFileSync(SETTINGS, JSON.stringify(settings, null, 2));
   console.log("✅ statusLine patched to use eink-wrapper");
 
   // Write bridge config for auto-start
-  const bridgePath = "/Volumes/990 EP/Dev/墨水屏/claude-eink-bridge";
+  const __filename = fileURLToPath(import.meta.url);
+  const bridgePath = dirname(__filename);
   const pythonPath = join(bridgePath, ".venv", "bin", "python");
 
+  mkdirSync(PLUGIN_DIR, { recursive: true });
   writeFileSync(
     BRIDGE_CFG,
     JSON.stringify({ python_path: pythonPath, bridge_path: bridgePath }, null, 2),

@@ -1,0 +1,7 @@
+{
+  "api_key": "YOUR_ZECTRIX_API_KEY",
+  "mac_address": "AA:BB:CC:DD:EE:FF",
+  "page_id": 5,
+  "interval_seconds": 60,
+  "font_path": "font.ttf"
+}
