@@ -1,0 +1,8 @@
+{
+  "api_key": "zt_a4a6d6238828e959edabcf689a238b81",
+  "mac_address": "DC:B4:D9:21:DC:B8",
+  "page_id": 5,
+  "interval_seconds": 300,
+  "snapshot_path": "~/.claude/plugins/claude-hud/eink-snapshot.json",
+  "font_path": "../resoukanban-main/font.ttf"
+}
