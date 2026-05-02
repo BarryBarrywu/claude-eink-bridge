@@ -1,7 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
-preview.png
+preview-local.png
 page_*.png
 .DS_Store
 config.json

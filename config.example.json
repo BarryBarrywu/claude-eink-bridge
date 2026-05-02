@@ -3,5 +3,6 @@
   "mac_address": "AA:BB:CC:DD:EE:FF",
   "page_id": 5,
   "interval_seconds": 60,
+  "greeting": "今天的Token用完了吗？",
   "font_path": "font.ttf"
 }

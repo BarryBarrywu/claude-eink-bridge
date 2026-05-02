@@ -143,9 +143,13 @@ def format_reset_time(reset_iso):
         hours, remainder = divmod(total_sec, 3600)
         minutes = remainder // 60
         if hours >= 24:
-            return f"{hours // 24}d"
+            days = hours // 24
+            remaining_hours = hours % 24
+            if remaining_hours > 0:
+                return f"{days}d {remaining_hours}h"
+            return f"{days}d"
         if hours > 0:
-            return f"{hours}h{minutes}m"
+            return f"{hours}h {minutes}m"
         return f"{minutes}m"
     except Exception:
         return None
@@ -156,7 +160,8 @@ def format_reset_time(reset_iso):
 class EinkRenderer:
     W, H = 400, 300
 
-    def __init__(self, font_path):
+    def __init__(self, font_path, greeting="今天的Token用完了吗？"):
+        self.greeting = greeting
         self.f_title   = ImageFont.truetype(font_path, 20)
         self.f_time    = ImageFont.truetype(font_path, 16)
         self.f_model   = ImageFont.truetype(font_path, 22)
@@ -198,6 +203,17 @@ class EinkRenderer:
     def _separator(self, draw, y):
         draw.line([(16, y), (384, y)], fill=0, width=1)
 
+    def _truncate_text(self, draw, text, font, max_width):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            return text
+        for i in range(len(text) - 1, 0, -1):
+            trunc = text[:i] + "..."
+            bbox = draw.textbbox((0, 0), trunc, font=font)
+            if bbox[2] - bbox[0] <= max_width:
+                return trunc
+        return "..."
+
     # ── Main render ───────────────────────────────────────────────
 
     def render(self, snapshot, active_sessions=0):
@@ -218,7 +234,8 @@ class EinkRenderer:
 
     def _render_waiting(self, draw):
         draw.rectangle([(0, 0), (399, 44)], fill=0)
-        self._center_text(draw, 12, "今天的Token用完了吗？", self.f_title, fill=255)
+        safe_greeting = self._truncate_text(draw, self.greeting, self.f_title, 360)
+        self._center_text(draw, 12, safe_greeting, self.f_title, fill=255)
         self._center_text(draw, 120, "Waiting for data...", self.f_model, fill=0)
         self._center_text(draw, 160, "Start a Claude Code session", self.f_project, fill=0)
 
@@ -227,7 +244,8 @@ class EinkRenderer:
     def _render_header(self, draw, snapshot):
         BAR_H = 44
         draw.rectangle([(0, 0), (399, BAR_H - 1)], fill=0)
-        draw.text((16, 11), "今天的Token用完了吗？", font=self.f_title, fill=255)
+        safe_greeting = self._truncate_text(draw, self.greeting, self.f_title, 270)
+        draw.text((16, 11), safe_greeting, font=self.f_title, fill=255)
 
         try:
             ts = datetime.fromisoformat(
@@ -329,7 +347,7 @@ class EinkRenderer:
 
         reset = format_reset_time(reset_iso)
         if reset:
-            self._right_text(draw, y + 4, f"↻ {reset}", self.f_detail)
+            self._right_text(draw, y + 4, f"{reset}", self.f_detail)
 
         return y + 26
 
@@ -399,7 +417,8 @@ IDLE_SHUTDOWN_SECONDS = 10 * 60  # 10 minutes
 
 
 def run(config, *, once=False, preview=False, debug=False):
-    renderer = EinkRenderer(config["font_path"])
+    greeting = config.get("greeting", "今天的Token用完了吗？")
+    renderer = EinkRenderer(config["font_path"], greeting=greeting)
     interval = config.get("interval_seconds", 60)
 
     print("╔══════════════════════════════════════╗")
@@ -418,7 +437,7 @@ def run(config, *, once=False, preview=False, debug=False):
             print(f"  [DEBUG] Loaded snapshot: {snapshot}")
         print("  Generating preview...")
         img = renderer.render(snapshot, active)
-        out = Path(__file__).parent / "preview.png"
+        out = Path(__file__).parent / "preview-local.png"
         img.save(str(out))
         print(f"  Preview saved to {out}")
         return

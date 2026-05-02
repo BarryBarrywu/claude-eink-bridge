@@ -50,17 +50,19 @@ function install(settings) {
     settings._einkOriginalStatusLine = settings.statusLine;
   }
 
-  let bunPath;
+  let commandStr;
   try {
-    bunPath = execSync("which bun", { encoding: "utf8" }).trim();
+    const bunPath = execSync("which bun", { encoding: "utf8" }).trim();
+    commandStr = `"${bunPath}" --env-file /dev/null "${WRAPPER}"`;
   } catch {
-    bunPath = join(HOME, ".bun", "bin", "bun");
-    console.warn(`⚠️  Could not find bun via 'which bun', falling back to ${bunPath}`);
+    console.warn("⚠️  Could not find 'bun'. Falling back to 'node' with 'npx tsx'.");
+    console.warn("   Will use 'npx -y tsx' to execute the wrapper.");
+    commandStr = `npx -y tsx "${WRAPPER}"`;
   }
 
   settings.statusLine = {
     type: "command",
-    command: `"${bunPath}" --env-file /dev/null "${WRAPPER}"`,
+    command: commandStr,
   };
 
   writeFileSync(SETTINGS, JSON.stringify(settings, null, 2));
