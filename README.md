@@ -1,5 +1,7 @@
 # Claude Code E-Ink HUD 墨水屏桌面看板
 
+[English](./README_EN.md)
+
 本项目是 [Claude HUD](https://github.com/jarrodwatts/claude-hud) 的硬件扩展桥接工具。它可以将你在终端使用 [Claude Code](https://docs.anthropic.com/zh-CN/docs/agents-and-tools/claude-code/overview) 时的实时状态（Token 消耗量、当前模型、上下文拥挤度等），无缝同步推送到你的 **Zectrix 墨水屏** 上，为你打造一个极客感满满的桌面 AI 物理看板。
 
 ![实拍效果图](device.jpg)
