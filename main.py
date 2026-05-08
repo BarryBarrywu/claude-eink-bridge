@@ -160,220 +160,259 @@ def format_reset_time(reset_iso):
 class EinkRenderer:
     W, H = 400, 300
 
+    # ── Layout constants ──────────────────────────────────────────
+    HDR_H       = 36    # header bar height
+    FOOTER_H    = 26    # footer height
+    SEP_H       = 2     # solid separator bar height
+    LIM_H       = 67    # rate-limits section height
+    CTX_COL_W   = 128   # right (context) column width
+    COL_DIV_W   = 2     # vertical column divider width
+    MODEL_COL_W = W - CTX_COL_W - COL_DIV_W  # = 270
+    L_PAD       = 12    # left/right margin for main content
+    R_PAD       = 10    # inner margin for right column
+    BODY_V      = 10    # vertical inset inside body columns
+
     def __init__(self, font_path, greeting="今天的Token用完了吗？"):
         self.greeting = greeting
-        self.f_title   = ImageFont.truetype(font_path, 20)
-        self.f_time    = ImageFont.truetype(font_path, 16)
-        self.f_model   = ImageFont.truetype(font_path, 22)
-        self.f_project = ImageFont.truetype(font_path, 14)
-        self.f_ctx_pct = ImageFont.truetype(font_path, 16)
-        self.f_label   = ImageFont.truetype(font_path, 12)
-        self.f_usage   = ImageFont.truetype(font_path, 20)
-        self.f_detail  = ImageFont.truetype(font_path, 13)
-        self.f_footer  = ImageFont.truetype(font_path, 13)
+        self.f_hdr    = ImageFont.truetype(font_path, 13)
+        self.f_date   = ImageFont.truetype(font_path, 11)
+        self.f_lbl    = ImageFont.truetype(font_path, 8)   # small section labels
+        self.f_model  = ImageFont.truetype(font_path, 36)  # large model name
+        self.f_ctx    = ImageFont.truetype(font_path, 40)  # large context %
+        self.f_meta   = ImageFont.truetype(font_path, 10)  # project / git
+        self.f_period = ImageFont.truetype(font_path, 10)  # 5H / 7D
+        self.f_pct    = ImageFont.truetype(font_path, 10)  # usage percentages
+        self.f_reset  = ImageFont.truetype(font_path, 9)   # reset times
+        self.f_tokens = ImageFont.truetype(font_path, 9)   # token count
+        self.f_footer = ImageFont.truetype(font_path, 10)
 
-    # ── Drawing primitives ────────────────────────────────────────
+    # ── Primitives ────────────────────────────────────────────────
 
-    def _bar(self, draw, x, y, w, h, percent, radius=4):
-        draw.rounded_rectangle(
-            [(x, y), (x + w, y + h)], radius=radius, outline=0, fill=255
-        )
+    def _tw(self, draw, text, font):
+        bb = draw.textbbox((0, 0), text, font=font)
+        return bb[2] - bb[0]
+
+    def _th(self, draw, text, font):
+        bb = draw.textbbox((0, 0), text, font=font)
+        return bb[3] - bb[1]
+
+    def _right(self, draw, x_right, y, text, font, fill=0):
+        draw.text((x_right - self._tw(draw, text, font), y), text, font=font, fill=fill)
+
+    def _center(self, draw, x0, x1, y, text, font, fill=0):
+        x = x0 + (x1 - x0 - self._tw(draw, text, font)) // 2
+        draw.text((x, y), text, font=font, fill=fill)
+
+    def _truncate(self, draw, text, font, max_w):
+        if self._tw(draw, text, font) <= max_w:
+            return text
+        for i in range(len(text) - 1, 0, -1):
+            t = text[:i] + "..."
+            if self._tw(draw, t, font) <= max_w:
+                return t
+        return "..."
+
+    def _bar(self, draw, x0, y0, x1, y1, percent, radius=3):
+        draw.rounded_rectangle([(x0, y0), (x1, y1)], radius=radius, outline=0, fill=255)
+        w = x1 - x0
         fill_w = int(w * min(max(percent, 0), 100) / 100)
         if fill_w > radius * 2:
             draw.rounded_rectangle(
-                [(x + 1, y + 1), (x + fill_w - 1, y + h - 1)],
-                radius=max(radius - 1, 1),
-                fill=0,
+                [(x0 + 1, y0 + 1), (x0 + fill_w - 1, y1 - 1)],
+                radius=max(radius - 1, 1), fill=0,
             )
         elif fill_w > 1:
-            draw.rectangle(
-                [(x + 1, y + 1), (x + fill_w - 1, y + h - 1)], fill=0
-            )
+            draw.rectangle([(x0 + 1, y0 + 1), (x0 + fill_w - 1, y1 - 1)], fill=0)
 
-    def _right_text(self, draw, y, text, font, margin=16):
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw = bbox[2] - bbox[0]
-        draw.text((self.W - margin - tw, y), text, font=font, fill=0)
+    def _tmeasure(self, draw, text, font):
+        bb = draw.textbbox((0, 0), text, font=font)
+        return bb[2] - bb[0], bb[3] - bb[1]
 
-    def _center_text(self, draw, y, text, font, fill=0):
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw = bbox[2] - bbox[0]
-        draw.text(((self.W - tw) // 2, y), text, font=font, fill=fill)
+    def _parse_ts(self, snapshot):
+        try:
+            return datetime.fromisoformat(
+                snapshot["timestamp"].replace("Z", "+00:00")
+            ).astimezone()
+        except Exception:
+            return None
 
-    def _separator(self, draw, y):
-        draw.line([(16, y), (384, y)], fill=0, width=1)
-
-    def _truncate_text(self, draw, text, font, max_width):
-        bbox = draw.textbbox((0, 0), text, font=font)
-        if bbox[2] - bbox[0] <= max_width:
-            return text
-        for i in range(len(text) - 1, 0, -1):
-            trunc = text[:i] + "..."
-            bbox = draw.textbbox((0, 0), trunc, font=font)
-            if bbox[2] - bbox[0] <= max_width:
-                return trunc
-        return "..."
-
-    # ── Main render ───────────────────────────────────────────────
+    # ── Public entry point ────────────────────────────────────────
 
     def render(self, snapshot, active_sessions=0):
         img = Image.new("1", (self.W, self.H), color=255)
         draw = ImageDraw.Draw(img)
-
         if snapshot is None:
-            self._render_waiting(draw)
-            return img
-
-        y = self._render_header(draw, snapshot)
-        y = self._render_model_project(draw, snapshot, y)
-        y = self._render_context(draw, snapshot, y)
-        y = self._render_usage(draw, snapshot, y)
-        self._render_footer(draw, snapshot, y, active_sessions)
-
+            self._waiting(draw)
+        else:
+            self._header(draw, snapshot)
+            self._body(draw, snapshot)
+            self._limits(draw, snapshot)
+            self._footer(draw, snapshot, active_sessions)
         return img
 
-    def _render_waiting(self, draw):
-        draw.rectangle([(0, 0), (399, 44)], fill=0)
-        safe_greeting = self._truncate_text(draw, self.greeting, self.f_title, 360)
-        self._center_text(draw, 12, safe_greeting, self.f_title, fill=255)
-        self._center_text(draw, 120, "Waiting for data...", self.f_model, fill=0)
-        self._center_text(draw, 160, "Start a Claude Code session", self.f_project, fill=0)
+    # ── Waiting screen ────────────────────────────────────────────
 
-    # ── Header (44px black bar) ───────────────────────────────────
+    def _waiting(self, draw):
+        draw.rectangle([(0, 0), (self.W - 1, self.HDR_H - 1)], fill=0)
+        safe = self._truncate(draw, self.greeting, self.f_hdr, self.W - 24)
+        draw.text((self.L_PAD, 11), safe, font=self.f_hdr, fill=255)
+        self._center(draw, 0, self.W, 110, "Waiting for data...", self.f_model)
+        self._center(draw, 0, self.W, 158, "Start a Claude Code session", self.f_meta)
 
-    def _render_header(self, draw, snapshot):
-        BAR_H = 44
-        draw.rectangle([(0, 0), (399, BAR_H - 1)], fill=0)
-        safe_greeting = self._truncate_text(draw, self.greeting, self.f_title, 270)
-        draw.text((16, 11), safe_greeting, font=self.f_title, fill=255)
+    # ── Header ────────────────────────────────────────────────────
 
-        try:
-            ts = datetime.fromisoformat(
-                snapshot["timestamp"].replace("Z", "+00:00")
-            )
-            update_str = ts.astimezone().strftime("%Y-%m-%d")
-        except Exception:
-            update_str = "----/--/--"
-        bbox = draw.textbbox((0, 0), update_str, font=self.f_time)
-        tw = bbox[2] - bbox[0]
-        draw.text((384 - tw, 13), update_str, font=self.f_time, fill=255)
+    def _header(self, draw, snapshot):
+        draw.rectangle([(0, 0), (self.W - 1, self.HDR_H - 1)], fill=0)
+        safe = self._truncate(draw, self.greeting, self.f_hdr, self.W - 110)
+        draw.text((self.L_PAD, 11), safe, font=self.f_hdr, fill=255)
+        ts = self._parse_ts(snapshot)
+        date_str = ts.strftime("%Y-%m-%d") if ts else "----/--/--"
+        self._right(draw, self.W - self.L_PAD, 13, date_str, self.f_date, fill=255)
 
-        return BAR_H + 6  # 50
+    # ── Body: left column (model) + right column (context) ────────
 
-    # ── Model + Project + Git ─────────────────────────────────────
+    def _body(self, draw, snapshot):
+        y0 = self.HDR_H
+        y1 = self.H - self.FOOTER_H - self.SEP_H - self.LIM_H - self.SEP_H  # 203
 
-    def _render_model_project(self, draw, snapshot, y):
+        # Vertical divider between columns
+        div_x = self.MODEL_COL_W  # 270
+        draw.rectangle([(div_x, y0), (div_x + self.COL_DIV_W - 1, y1 - 1)], fill=0)
+
+        self._body_model(draw, snapshot, y0, y1, div_x)
+        self._body_context(draw, snapshot, y0, y1, div_x + self.COL_DIV_W)
+
+    def _body_model(self, draw, snapshot, y0, y1, div_x):
+        V = self.BODY_V
+        lx = self.L_PAD
+
+        # Top group: "MODEL" label + name
+        draw.text((lx, y0 + V), "MODEL", font=self.f_lbl, fill=0)
+        lbl_h = self._th(draw, "MODEL", self.f_lbl)
+
         model = snapshot.get("model", "Unknown")
-        draw.text((16, y), model, font=self.f_model, fill=0)
+        model_str = self._truncate(draw, model, self.f_model, div_x - lx - 4)
+        draw.text((lx, y0 + V + lbl_h + 3), model_str, font=self.f_model, fill=0)
 
+        # Bottom group: thin separator + project + git (pushed to bottom via space-between)
         project = snapshot.get("project", "")
-        if project:
-            segments = project.replace("\\", "/").split("/")
-            name = segments[-1] if segments else project
-            self._right_text(draw, y + 4, name, self.f_project)
-        y += 30
+        project_name = project.replace("\\", "/").split("/")[-1] if project else ""
 
-        git = snapshot.get("git")
-        if git and git.get("branch"):
+        git = snapshot.get("git") or {}
+        git_str = ""
+        if git.get("branch"):
             dirty = "*" if git.get("isDirty") else ""
-            draw.text(
-                (16, y),
-                f"git:({git['branch']}{dirty})",
-                font=self.f_detail,
-                fill=0,
-            )
-        y += 20
+            git_str = f"git:({git['branch']}{dirty})"
 
-        self._separator(draw, y)
-        return y + 8
+        lines = [l for l in [project_name, git_str] if l]
+        lh = self._th(draw, "Mg", self.f_meta)
+        meta_h = lh * len(lines) + 4 * max(0, len(lines) - 1)
 
-    # ── Context Health ────────────────────────────────────────────
+        sep_y = y1 - V - meta_h - 7
+        draw.line([(lx, sep_y), (div_x - lx, sep_y)], fill=0, width=1)
+        for i, line in enumerate(lines):
+            draw.text((lx, sep_y + 7 + i * (lh + 4)), line, font=self.f_meta, fill=0)
 
-    def _render_context(self, draw, snapshot, y):
+    def _body_context(self, draw, snapshot, y0, y1, ctx_x):
+        V = self.BODY_V
+        rx0 = ctx_x + self.R_PAD
+        rx1 = self.W - self.R_PAD
+        rw  = rx1 - rx0
+        r_top = y0 + V
+        r_bot = y1 - V
+
         ctx = snapshot.get("context", {})
         pct = ctx.get("percent", 0)
-
-        draw.text((16, y), "CONTEXT", font=self.f_label, fill=0)
-
-        pct_text = f"{pct}%"
+        pct_str = f"{pct}%"
         if pct >= 85:
-            pct_text += " !"
-        draw.text((16 + 70, y - 2), pct_text, font=self.f_ctx_pct, fill=0)
+            pct_str += "!"
 
+        lbl_h   = self._th(draw, "CONTEXT", self.f_lbl)
+        pct_h   = self._th(draw, pct_str, self.f_ctx)
+        box_h   = 1 + 5 + pct_h + 2 + 1
+        tok_h   = self._th(draw, "000k/000k", self.f_tokens)
+        bot_h   = 14 + 4 + tok_h
+        gap     = max((r_bot - r_top - lbl_h - box_h - bot_h) // 2, 4)
+
+        draw.text((rx0, r_top), "CONTEXT", font=self.f_lbl, fill=0)
+
+        box_y0 = r_top + lbl_h + gap
+        box_y1 = box_y0 + box_h
+        draw.rectangle([(rx0, box_y0), (rx1, box_y1)], outline=0, fill=255)
+        tw = self._tw(draw, pct_str, self.f_ctx)
+        draw.text((rx0 + (rw - tw) // 2, box_y0 + 6), pct_str, font=self.f_ctx, fill=0)
+
+        gy0 = box_y1 + gap
+        self._bar(draw, rx0, gy0, rx1, gy0 + 14, pct)
         total = ctx.get("totalTokens", 0)
-        size = ctx.get("windowSize", 0)
+        size  = ctx.get("windowSize", 0)
         if size > 0:
-            self._right_text(
-                draw, y, f"{format_tokens(total)} / {format_tokens(size)}",
-                self.f_detail,
-            )
-        y += 22
+            tok_str = f"{format_tokens(total)}/{format_tokens(size)}"
+            self._right(draw, rx1, gy0 + 14 + 4, tok_str, self.f_tokens)
 
-        self._bar(draw, 16, y, 368, 20, pct, radius=5)
-        y += 28
+    # ── Rate limits ───────────────────────────────────────────────
 
-        self._separator(draw, y)
-        return y + 10
+    def _limits(self, draw, snapshot):
+        sep_y = self.H - self.FOOTER_H - self.SEP_H - self.LIM_H - self.SEP_H
+        draw.rectangle([(0, sep_y), (self.W - 1, sep_y + self.SEP_H - 1)], fill=0)
 
-    # ── Usage Limits ──────────────────────────────────────────────
+        y = sep_y + self.SEP_H + 6
+        draw.text((self.L_PAD, y), "RATE LIMITS", font=self.f_lbl, fill=0)
+        y += self._th(draw, "RATE LIMITS", self.f_lbl) + 5
 
-    def _render_usage(self, draw, snapshot, y):
-        draw.text((16, y), "USAGE", font=self.f_label, fill=0)
-        y += 18
-
-        usage = snapshot.get("usage")
-        if not usage:
-            draw.text((16, y), "No data", font=self.f_detail, fill=0)
-            return y + 24
-
+        usage = snapshot.get("usage") or {}
         five = usage.get("fiveHour")
         if five is not None:
-            y = self._usage_row(draw, y, "5h", five, usage.get("fiveHourResetAt"))
-            y += 6
-
+            y = self._limit_row(draw, y, "5H", five, usage.get("fiveHourResetAt"))
+            y += 5
         seven = usage.get("sevenDay")
         if seven is not None:
-            y = self._usage_row(draw, y, "7d", seven, usage.get("sevenDayResetAt"))
+            self._limit_row(draw, y, "7D", seven, usage.get("sevenDayResetAt"))
 
-        return y + 6
+    def _limit_row(self, draw, y, label, percent, reset_iso):
+        ROW_H = 18
+        RIGHT = self.W - self.L_PAD
+        GAP   = 8
 
-    def _usage_row(self, draw, y, label, percent, reset_iso):
-        draw.text((16, y), f"{label}:", font=self.f_usage, fill=0)
-
-        bar_x, bar_w = 62, 170
-        self._bar(draw, bar_x, y + 2, bar_w, 18, percent, radius=4)
-
-        draw.text((bar_x + bar_w + 10, y), f"{percent}%", font=self.f_usage, fill=0)
+        lh = self._th(draw, label, self.f_period)
+        draw.text((self.L_PAD, y + (ROW_H - lh) // 2), label, font=self.f_period, fill=0)
 
         reset = format_reset_time(reset_iso)
-        if reset:
-            self._right_text(draw, y + 4, f"{reset}", self.f_detail)
+        pct_str = f"{percent}%"
+        pct_w, pct_h = self._tmeasure(draw, pct_str, self.f_pct)
+        rst_w, rst_h = self._tmeasure(draw, reset, self.f_reset) if reset else (0, 0)
 
-        return y + 26
+        pct_x  = RIGHT - (rst_w + GAP if reset else 0) - pct_w
+        bar_x0 = self.L_PAD + 22 + GAP
+        bar_x1 = pct_x - GAP
+        bar_y0 = y + (ROW_H - 13) // 2
+
+        self._bar(draw, bar_x0, bar_y0, bar_x1, bar_y0 + 13, percent)
+        draw.text((pct_x, y + (ROW_H - pct_h) // 2), pct_str, font=self.f_pct, fill=0)
+        if reset:
+            self._right(draw, RIGHT, y + (ROW_H - rst_h) // 2 + 1, reset, self.f_reset)
+
+        return y + ROW_H
 
     # ── Footer ────────────────────────────────────────────────────
 
-    def _render_footer(self, draw, snapshot, y, active_sessions):
-        self._separator(draw, y)
-        y += 8
+    def _footer(self, draw, snapshot, active_sessions):
+        sep_y = self.H - self.FOOTER_H - self.SEP_H
+        draw.rectangle([(0, sep_y), (self.W - 1, sep_y + self.SEP_H - 1)], fill=0)
+
+        fy = sep_y + self.SEP_H
+        ty = fy + (self.FOOTER_H - self._th(draw, "Mg", self.f_footer)) // 2
 
         session = snapshot.get("sessionDuration", "")
         if session:
-            draw.text((16, y), f"Session: {session}", font=self.f_footer, fill=0)
+            draw.text((self.L_PAD, ty), f"Session: {session}", font=self.f_footer, fill=0)
 
         if active_sessions > 1:
-            self._center_text(
-                draw, y, f"{active_sessions} sessions", self.f_footer
-            )
+            self._center(draw, 0, self.W, ty, f"{active_sessions} sessions", self.f_footer)
 
-        try:
-            ts = datetime.fromisoformat(
-                snapshot["timestamp"].replace("Z", "+00:00")
-            )
-            time_str = ts.astimezone().strftime("%H:%M")
-        except Exception:
-            time_str = "--:--"
-        self._right_text(draw, y, time_str, self.f_footer)
+        ts = self._parse_ts(snapshot)
+        time_str = ts.strftime("%H:%M") if ts else "--:--"
+        self._right(draw, self.W - self.L_PAD, ty, time_str, self.f_footer)
 
 
 # ─── Zectrix API ─────────────────────────────────────────────────────────────
