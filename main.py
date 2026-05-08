@@ -164,7 +164,7 @@ class EinkRenderer:
     HDR_H       = 36    # header bar height
     FOOTER_H    = 26    # footer height
     SEP_H       = 2     # solid separator bar height
-    LIM_H       = 67    # rate-limits section height
+    LIM_H       = 88    # rate-limits section height
     CTX_COL_W   = 128   # right (context) column width
     COL_DIV_W   = 2     # vertical column divider width
     MODEL_COL_W = W - CTX_COL_W - COL_DIV_W  # = 270
@@ -174,17 +174,20 @@ class EinkRenderer:
 
     def __init__(self, font_path, greeting="今天的Token用完了吗？"):
         self.greeting = greeting
-        self.f_hdr    = ImageFont.truetype(font_path, 13)
-        self.f_date   = ImageFont.truetype(font_path, 11)
-        self.f_lbl    = ImageFont.truetype(font_path, 8)   # small section labels
+        self.f_hdr    = ImageFont.truetype(font_path, 16)
+        self.f_date   = ImageFont.truetype(font_path, 13)
+        self.f_lbl    = ImageFont.truetype(font_path, 12)  # section labels (RATE LIMITS)
         self.f_model  = ImageFont.truetype(font_path, 36)  # large model name
-        self.f_ctx    = ImageFont.truetype(font_path, 40)  # large context %
-        self.f_meta   = ImageFont.truetype(font_path, 10)  # project / git
-        self.f_period = ImageFont.truetype(font_path, 10)  # 5H / 7D
-        self.f_pct    = ImageFont.truetype(font_path, 10)  # usage percentages
-        self.f_reset  = ImageFont.truetype(font_path, 9)   # reset times
-        self.f_tokens = ImageFont.truetype(font_path, 9)   # token count
-        self.f_footer = ImageFont.truetype(font_path, 10)
+        self.f_ctx    = ImageFont.truetype(font_path, 36)  # large context %
+        self.f_ctx_sm = ImageFont.truetype(font_path, 28)  # fallback for context % overflow
+        self.f_meta   = ImageFont.truetype(font_path, 12)  # project / git
+        self.f_tok    = ImageFont.truetype(font_path, 15)  # token total
+        self.f_tok_sm = ImageFont.truetype(font_path, 13)  # token detail breakdown
+        self.f_period = ImageFont.truetype(font_path, 16)  # 5H / 7D
+        self.f_pct    = ImageFont.truetype(font_path, 16)  # usage percentages
+        self.f_reset  = ImageFont.truetype(font_path, 16)  # reset times
+        self.f_tokens = ImageFont.truetype(font_path, 12)  # token count under bar
+        self.f_footer = ImageFont.truetype(font_path, 12)
 
     # ── Primitives ────────────────────────────────────────────────
 
@@ -285,30 +288,46 @@ class EinkRenderer:
     def _body_model(self, draw, snapshot, y0, y1, div_x):
         V = self.BODY_V
         lx = self.L_PAD
-
-        # Top group: "MODEL" label + name
-        draw.text((lx, y0 + V), "MODEL", font=self.f_lbl, fill=0)
-        lbl_h = self._th(draw, "MODEL", self.f_lbl)
+        max_w = div_x - lx - 4
 
         model = snapshot.get("model", "Unknown")
-        model_str = self._truncate(draw, model, self.f_model, div_x - lx - 4)
-        draw.text((lx, y0 + V + lbl_h + 3), model_str, font=self.f_model, fill=0)
+        model_str = self._truncate(draw, model, self.f_model, max_w)
+        model_h = self._th(draw, model_str, self.f_model)
+        draw.text((lx, y0 + V), model_str, font=self.f_model, fill=0)
+        model_bottom = y0 + V + model_h
 
-        # Bottom group: thin separator + project + git (pushed to bottom via space-between)
+        # Bottom: thin separator + project + git
         project = snapshot.get("project", "")
         project_name = project.replace("\\", "/").split("/")[-1] if project else ""
-
         git = snapshot.get("git") or {}
         git_str = ""
         if git.get("branch"):
             dirty = "*" if git.get("isDirty") else ""
             git_str = f"git:({git['branch']}{dirty})"
-
         lines = [l for l in [project_name, git_str] if l]
         lh = self._th(draw, "Mg", self.f_meta)
         meta_h = lh * len(lines) + 4 * max(0, len(lines) - 1)
-
         sep_y = y1 - V - meta_h - 7
+
+        # Token breakdown — centered in the gap between model name and meta
+        ctx = snapshot.get("context", {})
+        in_tok    = ctx.get("inputTokens", 0)
+        out_tok   = ctx.get("outputTokens", 0)
+        cache_tok = ctx.get("cacheTokens", 0)
+        if in_tok or out_tok or cache_tok:
+            total_tok  = in_tok + out_tok + cache_tok
+            total_str  = format_tokens(total_tok)
+            detail_str = (f"in:{format_tokens(in_tok)}"
+                          f"  out:{format_tokens(out_tok)}"
+                          f"  cache:{format_tokens(cache_tok)}")
+            detail_str = self._truncate(draw, detail_str, self.f_tokens, max_w)
+            total_h  = self._th(draw, total_str, self.f_tok)
+            detail_h = self._th(draw, detail_str, self.f_tok_sm)
+            block_h  = total_h + 3 + detail_h
+            tok_y    = model_bottom + (sep_y - model_bottom - block_h) // 2
+            draw.text((lx, tok_y), total_str, font=self.f_tok, fill=0)
+            draw.text((lx, tok_y + total_h + 3), detail_str, font=self.f_tok_sm, fill=0)
+
         draw.line([(lx, sep_y), (div_x - lx, sep_y)], fill=0, width=1)
         for i, line in enumerate(lines):
             draw.text((lx, sep_y + 7 + i * (lh + 4)), line, font=self.f_meta, fill=0)
@@ -327,20 +346,24 @@ class EinkRenderer:
         if pct >= 85:
             pct_str += "!"
 
-        lbl_h   = self._th(draw, "CONTEXT", self.f_lbl)
-        pct_h   = self._th(draw, pct_str, self.f_ctx)
-        box_h   = 1 + 5 + pct_h + 2 + 1
+        tw = self._tw(draw, pct_str, self.f_ctx)
+        if tw > rw - 4:
+            ctx_font = self.f_ctx_sm
+            tw = self._tw(draw, pct_str, ctx_font)
+        else:
+            ctx_font = self.f_ctx
+        pct_bb  = draw.textbbox((0, 0), pct_str, font=ctx_font)
+        # pct_bb[3] is the raw bottom offset from draw position — not bb[3]-bb[1],
+        # which would undercount and clip the text below the box border.
+        box_h   = 6 + pct_bb[3] + 4
         tok_h   = self._th(draw, "000k/000k", self.f_tokens)
         bot_h   = 14 + 4 + tok_h
-        gap     = max((r_bot - r_top - lbl_h - box_h - bot_h) // 2, 4)
+        gap     = max((r_bot - r_top - box_h - bot_h) // 2, 4)
 
-        draw.text((rx0, r_top), "CONTEXT", font=self.f_lbl, fill=0)
-
-        box_y0 = r_top + lbl_h + gap
+        box_y0 = r_top + gap
         box_y1 = box_y0 + box_h
         draw.rectangle([(rx0, box_y0), (rx1, box_y1)], outline=0, fill=255)
-        tw = self._tw(draw, pct_str, self.f_ctx)
-        draw.text((rx0 + (rw - tw) // 2, box_y0 + 6), pct_str, font=self.f_ctx, fill=0)
+        draw.text((rx0 + (rw - tw) // 2, box_y0 + 6), pct_str, font=ctx_font, fill=0)
 
         gy0 = box_y1 + gap
         self._bar(draw, rx0, gy0, rx1, gy0 + 14, pct)
@@ -370,27 +393,32 @@ class EinkRenderer:
             self._limit_row(draw, y, "7D", seven, usage.get("sevenDayResetAt"))
 
     def _limit_row(self, draw, y, label, percent, reset_iso):
-        ROW_H = 18
-        RIGHT = self.W - self.L_PAD
-        GAP   = 8
+        ROW_H   = 28
+        BAR_H   = 18
+        RIGHT   = self.W - self.L_PAD  # 388
+        GAP     = 8
+        PCT_COL = 44   # fixed column width for percentage text
+        RST_COL = 66   # fixed column width for reset time text
 
         lh = self._th(draw, label, self.f_period)
         draw.text((self.L_PAD, y + (ROW_H - lh) // 2), label, font=self.f_period, fill=0)
 
         reset = format_reset_time(reset_iso)
         pct_str = f"{percent}%"
-        pct_w, pct_h = self._tmeasure(draw, pct_str, self.f_pct)
-        rst_w, rst_h = self._tmeasure(draw, reset, self.f_reset) if reset else (0, 0)
+        _, pct_h = self._tmeasure(draw, pct_str, self.f_pct)
 
-        pct_x  = RIGHT - (rst_w + GAP if reset else 0) - pct_w
-        bar_x0 = self.L_PAD + 22 + GAP
-        bar_x1 = pct_x - GAP
-        bar_y0 = y + (ROW_H - 13) // 2
+        # Fixed bar boundaries — same for every row regardless of text width
+        bar_x0 = self.L_PAD + 30 + GAP
+        bar_x1 = RIGHT - RST_COL - GAP - PCT_COL - GAP
+        bar_y0 = y + (ROW_H - BAR_H) // 2
+        self._bar(draw, bar_x0, bar_y0, bar_x1, bar_y0 + BAR_H, percent)
 
-        self._bar(draw, bar_x0, bar_y0, bar_x1, bar_y0 + 13, percent)
-        draw.text((pct_x, y + (ROW_H - pct_h) // 2), pct_str, font=self.f_pct, fill=0)
+        # Pct right-aligned into its fixed column
+        self._right(draw, RIGHT - RST_COL - GAP, y + (ROW_H - pct_h) // 2, pct_str, self.f_pct)
+
         if reset:
-            self._right(draw, RIGHT, y + (ROW_H - rst_h) // 2 + 1, reset, self.f_reset)
+            _, rst_h = self._tmeasure(draw, reset, self.f_reset)
+            self._right(draw, RIGHT, y + (ROW_H - rst_h) // 2, reset, self.f_reset)
 
         return y + ROW_H
 

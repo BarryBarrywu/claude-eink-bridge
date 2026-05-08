@@ -170,6 +170,11 @@ function writeSnapshot(raw: string): void {
         (usage.input_tokens ?? 0) +
         (usage.cache_creation_input_tokens ?? 0) +
         (usage.cache_read_input_tokens ?? 0),
+      inputTokens: usage.input_tokens ?? 0,
+      outputTokens: usage.output_tokens ?? 0,
+      cacheTokens:
+        (usage.cache_creation_input_tokens ?? 0) +
+        (usage.cache_read_input_tokens ?? 0),
     },
     usage: rl
       ? {
