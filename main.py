@@ -181,8 +181,7 @@ class EinkRenderer:
         self.f_ctx    = ImageFont.truetype(font_path, 36)  # large context %
         self.f_ctx_sm = ImageFont.truetype(font_path, 28)  # fallback for context % overflow
         self.f_meta   = ImageFont.truetype(font_path, 12)  # project / git
-        self.f_tok    = ImageFont.truetype(font_path, 15)  # token total
-        self.f_tok_sm = ImageFont.truetype(font_path, 13)  # token detail breakdown
+        self.f_tok_sm = ImageFont.truetype(font_path, 15)  # token detail breakdown
         self.f_period = ImageFont.truetype(font_path, 16)  # 5H / 7D
         self.f_pct    = ImageFont.truetype(font_path, 16)  # usage percentages
         self.f_reset  = ImageFont.truetype(font_path, 16)  # reset times
@@ -315,18 +314,13 @@ class EinkRenderer:
         out_tok   = ctx.get("outputTokens", 0)
         cache_tok = ctx.get("cacheTokens", 0)
         if in_tok or out_tok or cache_tok:
-            total_tok  = in_tok + out_tok + cache_tok
-            total_str  = format_tokens(total_tok)
             detail_str = (f"in:{format_tokens(in_tok)}"
                           f"  out:{format_tokens(out_tok)}"
                           f"  cache:{format_tokens(cache_tok)}")
-            detail_str = self._truncate(draw, detail_str, self.f_tokens, max_w)
-            total_h  = self._th(draw, total_str, self.f_tok)
+            detail_str = self._truncate(draw, detail_str, self.f_tok_sm, max_w)
             detail_h = self._th(draw, detail_str, self.f_tok_sm)
-            block_h  = total_h + 3 + detail_h
-            tok_y    = model_bottom + (sep_y - model_bottom - block_h) // 2
-            draw.text((lx, tok_y), total_str, font=self.f_tok, fill=0)
-            draw.text((lx, tok_y + total_h + 3), detail_str, font=self.f_tok_sm, fill=0)
+            tok_y    = model_bottom + (sep_y - model_bottom - detail_h) // 2
+            draw.text((lx, tok_y), detail_str, font=self.f_tok_sm, fill=0)
 
         draw.line([(lx, sep_y), (div_x - lx, sep_y)], fill=0, width=1)
         for i, line in enumerate(lines):
