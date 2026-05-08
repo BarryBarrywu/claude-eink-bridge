@@ -37,7 +37,8 @@ If you want to explore or develop further, here's what each file does:
 
 - **Top Status Bar**: Customizable greeting (default: "Token exhausted yet?") and the last update date.
 - **Project & Model Info**: Current model name (e.g., `Claude 3.6 Sonnet`), current project folder name, and Git branch status (shows `*` if there are uncommitted changes).
-- **Context Health (CONTEXT)**: Visual progress bar showing context occupancy with precise Token consumption (e.g., `12k / 200k`). Warnings appear when the context is nearly full.
+- **Token Breakdown**: Below the model name, a live token usage summary shows total consumption split into input (in), output (out), and cache — so you can see exactly where your tokens are going.
+- **Context Health (CONTEXT)**: Visual progress bar showing context occupancy with precise Token consumption (e.g., `82k / 200k`). Warnings appear when the context is nearly full.
 - **API Quota Usage (USAGE)**: Progress bars for API quota usage over the last 5 hours and 7 days. Most importantly, it shows a **countdown** to quota reset (e.g., `2h15m`), letting you know exactly when you'll be back to full power.
 - **Bottom Status Bar**: Shows the duration of the current session, whether multiple terminals are running, and the current clock.
 
