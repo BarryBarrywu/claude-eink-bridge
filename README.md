@@ -56,7 +56,7 @@
 无需下载源码、解压、找文件夹。你只需要打开 Mac 的 **终端 (Terminal)**，复制下面这行命令粘贴进去，然后按回车：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/answer24/claude-eink-bridge/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BarryBarrywu/claude-eink-bridge/main/install.sh | bash
 ```
 
 **这个命令会自动在后台帮你做好一切：**
@@ -124,7 +124,7 @@ python main.py --preview
 **Q: 更新了项目代码后，改动没有生效？**
 A: 这是正常现象。Claude Code 实际运行的是安装时复制到 `~/.claude/eink-wrapper.ts` 的文件，而不是项目目录里的源文件。每次拉取新代码后，需要重新运行一次安装命令让改动生效：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/answer24/claude-eink-bridge/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BarryBarrywu/claude-eink-bridge/main/install.sh | bash
 ```
 安装脚本会跳过已有的 venv 和 config，只更新拦截器文件，不会影响你的配置。
 

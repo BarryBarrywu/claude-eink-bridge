@@ -56,7 +56,7 @@ Before installing, ensure your computer has the following tools:
 No need to download source code or find folders. Just open your Mac's **Terminal**, paste the command below, and press Enter:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/answer24/claude-eink-bridge/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BarryBarrywu/claude-eink-bridge/main/install.sh | bash
 ```
 
 **This command automatically handles everything in the background:**
@@ -124,7 +124,7 @@ This generates a `preview-local.png` file. If it doesn't appear or an error occu
 **Q: Changes aren't taking effect after updating project code?**
 A: This is normal. Claude Code actually runs the file copied to `~/.claude/eink-wrapper.ts`, not the one in the project directory. After pulling new code, re-run the installation command:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/answer24/claude-eink-bridge/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BarryBarrywu/claude-eink-bridge/main/install.sh | bash
 ```
 The script will skip existing venv and config, only updating the interceptor file.
 
