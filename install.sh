@@ -6,7 +6,7 @@ echo "  Claude E-Ink Bridge 闪电安装向导"
 echo "======================================"
 echo ""
 
-GITHUB_USERNAME="answer24"
+GITHUB_USERNAME="BarryBarrywu"
 REPO_URL="https://github.com/${GITHUB_USERNAME}/claude-eink-bridge.git"
 INSTALL_DIR="$HOME/.claude-eink-bridge"
 
