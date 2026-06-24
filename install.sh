@@ -10,6 +10,55 @@ GITHUB_USERNAME="BarryBarrywu"
 REPO_URL="https://github.com/${GITHUB_USERNAME}/claude-eink-bridge.git"
 INSTALL_DIR="$HOME/.claude-eink-bridge"
 
+# 允许通过 --config-dir <路径> 显式指定目标 Claude 配置目录（非交互场景用）
+CONFIG_DIR_ARG=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --config-dir) CONFIG_DIR_ARG="$2"; shift 2 ;;
+        --config-dir=*) CONFIG_DIR_ARG="${1#*=}"; shift ;;
+        *) shift ;;
+    esac
+done
+
+# 解析要安装到哪个 Claude 配置目录。
+# 优先级：--config-dir 参数 > $CLAUDE_CONFIG_DIR 环境变量 > 探测候选(多个则询问) > ~/.claude
+resolve_claude_dir() {
+    if [ -n "$CONFIG_DIR_ARG" ]; then echo "$CONFIG_DIR_ARG"; return; fi
+    if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then echo "$CLAUDE_CONFIG_DIR"; return; fi
+
+    # 探测：~/.claude 及 ~/.claude-* 中，含 settings.json 或 plugins/ 的才算真实配置目录
+    local cands=() d
+    for d in "$HOME"/.claude "$HOME"/.claude-*; do
+        [ -d "$d" ] || continue
+        case "$d" in *.bak-*|*.old*) continue ;; esac
+        if [ -f "$d/settings.json" ] || [ -d "$d/plugins" ]; then cands+=("$d"); fi
+    done
+
+    if [ "${#cands[@]}" -le 1 ]; then
+        echo "${cands[0]:-$HOME/.claude}"; return
+    fi
+
+    # 多个候选：能读 /dev/tty 就让用户选（兼容 curl | bash）
+    if [ -r /dev/tty ]; then
+        echo "🔍 检测到多个 Claude 配置目录，请选择安装到哪个：" >&2
+        local i=1
+        for d in "${cands[@]}"; do echo "   $i) $d" >&2; i=$((i+1)); done
+        printf "   输入序号 [默认 1]: " >&2
+        local choice=""; read -r choice </dev/tty || true
+        choice="${choice:-1}"
+        case "$choice" in
+            ''|*[!0-9]*) choice=1 ;;
+        esac
+        if [ "$choice" -ge 1 ] && [ "$choice" -le "${#cands[@]}" ]; then
+            echo "${cands[$((choice-1))]}"
+        else
+            echo "${cands[0]}"
+        fi
+    else
+        echo "${cands[0]}"
+    fi
+}
+
 # 1. 检查基础环境
 if ! command -v python3 &> /dev/null; then
     echo "❌ 错误: 未找到 Python 3。请先安装: https://www.python.org/downloads/"
@@ -38,9 +87,11 @@ else
 fi
 
 # 3. 部署拦截器
-echo "⏳ 正在配置 Claude HUD 拦截器..."
-mkdir -p ~/.claude
-cp eink-wrapper.ts ~/.claude/eink-wrapper.ts
+CLAUDE_DIR="$(resolve_claude_dir)"
+export CLAUDE_CONFIG_DIR="$CLAUDE_DIR"   # 让 setup-eink.mjs 与之保持一致
+echo "⏳ 正在配置 Claude HUD 拦截器到: $CLAUDE_DIR"
+mkdir -p "$CLAUDE_DIR"
+cp eink-wrapper.ts "$CLAUDE_DIR/eink-wrapper.ts"
 if command -v node &> /dev/null; then
     node setup-eink.mjs
 else

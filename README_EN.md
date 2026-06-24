@@ -66,6 +66,22 @@ curl -fsSL https://raw.githubusercontent.com/BarryBarrywu/claude-eink-bridge/mai
 
 Once the terminal shows `🎉 Lightning installation complete!`, a **text editor window will automatically pop up** with the `config.json` file (if not, you can manually run `open ~/.claude-eink-bridge/config.json` or open it with VSCode).
 
+### Multiple Claude config directories (CLAUDE_CONFIG_DIR)
+
+If you run a non-default Claude instance via `CLAUDE_CONFIG_DIR` (e.g. `~/.claude-team`), the installer now targets **that** directory instead of a hardcoded `~/.claude`:
+
+- when more than one config directory is detected, the installer lists them and lets you pick;
+- you can also specify it explicitly (useful for non-interactive / scripted installs):
+
+```bash
+# Option A: environment variable
+CLAUDE_CONFIG_DIR="$HOME/.claude-team" bash install.sh
+# Option B: command-line flag
+bash install.sh --config-dir "$HOME/.claude-team"
+```
+
+> If unset, behavior is unchanged and it installs to `~/.claude`. `main.py` also honors `CLAUDE_CONFIG_DIR` (inherited automatically when Claude Code spawns the bridge, so no manual export is needed).
+
 ---
 
 ## ⚙️ Binding E-Ink (Zectrix Platform Config)

@@ -21,9 +21,12 @@ import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 
 const HOME = homedir();
-const SETTINGS = join(HOME, ".claude", "settings.json");
-const WRAPPER = join(HOME, ".claude", "eink-wrapper.ts");
-const PLUGIN_DIR = join(HOME, ".claude", "plugins", "claude-hud");
+// Honor CLAUDE_CONFIG_DIR so install can target a non-default Claude config
+// directory (e.g. a separate ~/.claude-team instance). Falls back to ~/.claude.
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude");
+const SETTINGS = join(CLAUDE_DIR, "settings.json");
+const WRAPPER = join(CLAUDE_DIR, "eink-wrapper.ts");
+const PLUGIN_DIR = join(CLAUDE_DIR, "plugins", "claude-hud");
 const BRIDGE_CFG = join(PLUGIN_DIR, "eink-bridge.json");
 
 const isUndo = process.argv.includes("--undo");
