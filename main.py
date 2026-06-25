@@ -32,7 +32,10 @@ import requests
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-PLUGIN_DIR = Path.home() / ".claude" / "plugins" / "claude-hud"
+# Honor CLAUDE_CONFIG_DIR so the bridge works with non-default Claude config
+# directories (e.g. a separate ~/.claude-team instance). Falls back to ~/.claude.
+CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude"))
+PLUGIN_DIR = CLAUDE_DIR / "plugins" / "claude-hud"
 SNAPSHOTS_DIR = PLUGIN_DIR / "eink-snapshots"
 PID_FILE = PLUGIN_DIR / "eink-bridge.pid"
 STALE_THRESHOLD = 3600  # seconds — ignore snapshots older than this

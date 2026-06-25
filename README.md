@@ -66,6 +66,22 @@ curl -fsSL https://raw.githubusercontent.com/BarryBarrywu/claude-eink-bridge/mai
 
 当终端里弹出 `🎉 闪电安装全部完成！` 的提示时，**系统会自动弹出一个文本编辑窗口**打开 `config.json` 文件（如果没有自动弹出，你也可以手动运行 `open ~/.claude-eink-bridge/config.json` 或者是用 VSCode 打开它）。
 
+### 多个 Claude 配置目录 (CLAUDE_CONFIG_DIR)
+
+如果你用 `CLAUDE_CONFIG_DIR` 跑了一个非默认的 Claude 实例（例如 `~/.claude-team`），安装脚本会把拦截器装到**正确的那个目录**，而不是写死的 `~/.claude`：
+
+- 探测到多个配置目录时，安装过程会列出来让你选；
+- 也可以显式指定（适合非交互/脚本场景）：
+
+```bash
+# 方式一：环境变量
+CLAUDE_CONFIG_DIR="$HOME/.claude-team" bash install.sh
+# 方式二：命令行参数
+bash install.sh --config-dir "$HOME/.claude-team"
+```
+
+> 不设置时行为不变，默认安装到 `~/.claude`。手动跑 `main.py` 时同样会读取 `CLAUDE_CONFIG_DIR`（由 Claude Code 自动拉起桥接时会自动继承，无需手动设置）。
+
 ---
 
 ## ⚙️ 绑定墨水屏 (Zectrix 平台配置)
